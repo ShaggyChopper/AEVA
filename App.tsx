@@ -1,163 +1,366 @@
-
-import React, { useState, useCallback, useMemo } from 'react';
-import type { Transaction, ItemCategoryMap, ExpenseCategory } from './types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { processReceipt, getFinancialFeedback } from './services/geminiService';
-import Dashboard from './components/Dashboard';
-import UploadReceipt from './components/UploadReceipt';
-import TransactionList from './components/TransactionList';
-import CategorySelectorModal from './components/CategorySelectorModal';
-import AIFeedback from './components/AIFeedback';
+import type { Transaction, ReceiptData, ReceiptItem, ExpenseCategory, Budgets, ToastMessage, CategoryRuleMap } from './types';
+import { convertCurrency } from './utils/currency';
+import { DEFAULT_EXPENSE_CATEGORIES, CATEGORY_COLORS, DEFAULT_CATEGORY_RULE_MAP } from './constants';
+
 import { Header } from './components/Header';
+import Dashboard from './components/Dashboard';
+import CategorySelectorModal from './components/CategorySelectorModal';
+import EditTransactionModal from './components/EditTransactionModal';
 import { Toast } from './components/Toast';
+import ManageCategoriesModal from './components/ManageCategoriesModal';
+import SetBudgetsModal from './components/SetBudgetsModal';
+import AddTransactionModal from './components/AddTransactionModal';
+// Fix: Import missing components
+import TransactionList from './components/TransactionList';
+import UploadReceipt from './components/UploadReceipt';
+import AIFeedback from './components/AIFeedback';
+
+// A simple utility to convert a File to a a base64 string
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = (error) => reject(error);
+  });
+};
 
 const App: React.FC = () => {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [itemCategoryMap, setItemCategoryMap] = useState<ItemCategoryMap>({});
-  const [itemsToCategorize, setItemsToCategorize] = useState<Transaction[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [loadingMessage, setLoadingMessage] = useState<string>('');
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [feedback, setFeedback] = useState<string>('');
+    const [transactions, setTransactions] = useState<Transaction[]>(() => {
+        const saved = localStorage.getItem('transactions');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(() => {
+        const saved = localStorage.getItem('expenseCategories');
+        return saved ? JSON.parse(saved) : DEFAULT_EXPENSE_CATEGORIES;
+    });
+    const [categoryRuleMap, setCategoryRuleMap] = useState<CategoryRuleMap>(() => {
+        const saved = localStorage.getItem('categoryRuleMap');
+        return saved ? JSON.parse(saved) : DEFAULT_CATEGORY_RULE_MAP;
+    });
+    const [primaryCurrency, setPrimaryCurrency] = useState<string>(() => {
+        return localStorage.getItem('primaryCurrency') || 'USD';
+    });
+    const [budgets, setBudgets] = useState<Budgets>(() => {
+        const saved = localStorage.getItem('budgets');
+        return saved ? JSON.parse(saved) : {};
+    });
 
-  const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
-  };
+    // App state
+    const [isLoading, setIsLoading] = useState(false);
+    const [isAILoading, setIsAILoading] = useState(false);
+    const [aiFeedback, setAIFeedback] = useState('');
+    const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const handleReceiptUpload = useCallback(async (file: File) => {
-    setIsLoading(true);
-    setLoadingMessage('Analyzing your receipt with Gemini AI...');
-    try {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = async () => {
-        const base64Image = (reader.result as string).split(',')[1];
+    // Modal state
+    const [itemsToCategorize, setItemsToCategorize] = useState<Omit<Transaction, 'category'>[]>([]);
+    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+    const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+    const [isBudgetsModalOpen, setIsBudgetsModalOpen] = useState(false);
+    const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
+    
+    // Filter state
+    const [searchTerm, setSearchTerm] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState('');
+    const [dateFilter, setDateFilter] = useState({ 
+        startDate: '', 
+        endDate: new Date().toISOString().split('T')[0] 
+    });
+
+
+    // Persist to localStorage
+    useEffect(() => {
+        localStorage.setItem('transactions', JSON.stringify(transactions));
+    }, [transactions]);
+     useEffect(() => {
+        localStorage.setItem('expenseCategories', JSON.stringify(expenseCategories));
+    }, [expenseCategories]);
+    useEffect(() => {
+        localStorage.setItem('primaryCurrency', primaryCurrency);
+    }, [primaryCurrency]);
+     useEffect(() => {
+        localStorage.setItem('budgets', JSON.stringify(budgets));
+    }, [budgets]);
+    useEffect(() => {
+        localStorage.setItem('categoryRuleMap', JSON.stringify(categoryRuleMap));
+    }, [categoryRuleMap]);
+
+    const addToast = (message: string, type: ToastMessage['type']) => {
+        setToasts(prev => [...prev, { id: Date.now(), message, type }]);
+    };
+    
+    const handleReceiptUpload = async (file: File) => {
+        setIsLoading(true);
         try {
-          const receiptData = await processReceipt(base64Image);
-          
-          if (!receiptData || !receiptData.items || receiptData.items.length === 0) {
-            throw new Error("AI could not read any items from the receipt.");
-          }
+            const base64Image = await fileToBase64(file);
+            const receiptData = await processReceipt(base64Image);
+            
+            const newItemsToCategorize: Omit<Transaction, 'category'>[] = receiptData.items.map((item: ReceiptItem) => ({
+                id: crypto.randomUUID(),
+                name: item.name,
+                originalAmount: item.price,
+                originalCurrency: receiptData.currency,
+                amount: convertCurrency(item.price, receiptData.currency, primaryCurrency),
+                date: receiptData.date,
+                merchant: receiptData.merchant,
+            }));
 
-          const newTransactions: Transaction[] = [];
-          const newItemsToCategorize: Transaction[] = [];
-          
-          receiptData.items.forEach(item => {
-            const normalizedItemName = item.name.trim().toLowerCase();
-            const existingCategory = itemCategoryMap[normalizedItemName];
-            const newTransaction: Transaction = {
-              id: `${Date.now()}-${item.name}-${Math.random()}`,
-              name: item.name,
-              amount: item.price,
-              date: receiptData.date || new Date().toISOString().split('T')[0],
-              category: existingCategory || 'Others' as ExpenseCategory.Others,
-            };
-
-            if (existingCategory) {
-              newTransactions.push(newTransaction);
-            } else {
-              newItemsToCategorize.push(newTransaction);
-            }
-          });
-
-          setTransactions(prev => [...prev, ...newTransactions]);
-          setItemsToCategorize(prev => [...prev, ...newItemsToCategorize]);
-          showToast('Receipt processed successfully!', 'success');
-
+            setItemsToCategorize(newItemsToCategorize);
+            addToast('Receipt processed successfully!', 'success');
         } catch (error) {
-          console.error("Error processing receipt: ", error);
-          showToast(error instanceof Error ? error.message : "Failed to process receipt.", 'error');
+            console.error(error);
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            addToast(errorMessage, 'error');
         } finally {
-          setIsLoading(false);
-          setLoadingMessage('');
+            setIsLoading(false);
         }
-      };
-      reader.onerror = (error) => {
-          console.error("File reading error: ", error);
-          showToast("Failed to read the image file.", 'error');
-          setIsLoading(false);
-          setLoadingMessage('');
-      };
-    } catch (error) {
-      console.error("Error setting up file reader: ", error);
-      showToast("An unexpected error occurred.", 'error');
-      setIsLoading(false);
-      setLoadingMessage('');
-    }
-  }, [itemCategoryMap]);
-
-  const handleCategorySelected = useCallback((transactionId: string, category: ExpenseCategory) => {
-    const itemToCategorize = itemsToCategorize.find(t => t.id === transactionId);
-    if (!itemToCategorize) return;
-
-    const normalizedItemName = itemToCategorize.name.trim().toLowerCase();
+    };
     
-    setItemCategoryMap(prev => ({ ...prev, [normalizedItemName]: category }));
+    const checkForBudgetAlerts = useCallback((transaction: Transaction) => {
+        if (transaction.category === 'Income') return;
+
+        const budget = budgets[transaction.category];
+        if (!budget || budget <= 0) return;
+
+        const startOfMonth = new Date(new Date(transaction.date).getFullYear(), new Date(transaction.date).getMonth(), 1).toISOString().split('T')[0];
+        const endOfMonth = new Date(new Date(transaction.date).getFullYear(), new Date(transaction.date).getMonth() + 1, 0).toISOString().split('T')[0];
+
+        const monthlySpend = transactions
+            .filter(t => t.category === transaction.category && t.date >= startOfMonth && t.date <= endOfMonth)
+            .reduce((sum, t) => sum + t.amount, 0);
+
+        const newTotalSpend = monthlySpend + transaction.amount;
+        
+        if (newTotalSpend >= budget) {
+            addToast(`You've exceeded your ${transaction.category} budget!`, 'warning');
+        } else if (newTotalSpend >= budget * 0.8) {
+            addToast(`You've used over 80% of your ${transaction.category} budget.`, 'warning');
+        }
+    }, [transactions, budgets]);
+
+    const handleCategorySelected = (transactionId: string, category: ExpenseCategory) => {
+        const item = itemsToCategorize.find(t => t.id === transactionId);
+        if (item) {
+            const newTransaction = { ...item, category };
+            setTransactions(prev => [newTransaction, ...prev]);
+            checkForBudgetAlerts(newTransaction);
+        }
+        setItemsToCategorize(prev => prev.filter(t => t.id !== transactionId));
+    };
     
-    const updatedTransaction = { ...itemToCategorize, category };
-    setTransactions(prev => [...prev, updatedTransaction]);
+    const handleSkipCategorization = () => {
+        const itemsWithDefaultCategory = itemsToCategorize.map(item => ({ ...item, category: 'Others' as ExpenseCategory }));
+        setTransactions(prev => [...itemsWithDefaultCategory, ...prev]);
+        itemsWithDefaultCategory.forEach(checkForBudgetAlerts);
+        setItemsToCategorize([]);
+    };
+    
+    const handleUpdateTransaction = (updatedTransaction: Transaction) => {
+        const convertedAmount = convertCurrency(updatedTransaction.originalAmount, updatedTransaction.originalCurrency, primaryCurrency);
+        const finalTransaction = { ...updatedTransaction, amount: convertedAmount };
 
-    setItemsToCategorize(prev => prev.filter(t => t.id !== transactionId));
-  }, [itemsToCategorize]);
+        setTransactions(prev => prev.map(t => t.id === finalTransaction.id ? finalTransaction : t));
+        setEditingTransaction(null);
+        addToast('Transaction updated!', 'success');
+        checkForBudgetAlerts(finalTransaction);
+    };
 
-  const handleGetFeedback = useCallback(async () => {
-    if (transactions.length === 0) {
-      showToast('Not enough data for feedback. Please add more transactions.', 'error');
-      return;
-    }
-    setIsLoading(true);
-    setLoadingMessage('Generating financial insights...');
-    setFeedback('');
-    try {
-      const aiFeedback = await getFinancialFeedback(transactions);
-      setFeedback(aiFeedback);
-    } catch (error) {
-      console.error("Error getting feedback: ", error);
-      showToast('Failed to get AI feedback.', 'error');
-    } finally {
-      setIsLoading(false);
-      setLoadingMessage('');
-    }
-  }, [transactions]);
-  
-  const sortedTransactions = useMemo(() => {
-    return [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [transactions]);
+    const handleAddTransaction = (newTransactionData: Omit<Transaction, 'id' | 'amount'>) => {
+        const newTransaction: Transaction = {
+            id: crypto.randomUUID(),
+            ...newTransactionData,
+            amount: convertCurrency(newTransactionData.originalAmount, newTransactionData.originalCurrency, primaryCurrency)
+        };
+        setTransactions(prev => [newTransaction, ...prev]);
+        setIsAddTransactionModalOpen(false);
+        addToast('Transaction added!', 'success');
+        checkForBudgetAlerts(newTransaction);
+    };
 
-  return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans">
-      <Header />
-      <main className="container mx-auto p-4 md:p-8">
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    const handleGetAIFeedback = async () => {
+        if (transactions.length < 5) {
+            addToast("Please add at least 5 transactions for a meaningful analysis.", 'warning');
+            return;
+        }
+        setIsAILoading(true);
+        try {
+            const feedback = await getFinancialFeedback(transactions, primaryCurrency);
+            setAIFeedback(feedback);
+        } catch (error) {
+            console.error(error);
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            addToast(errorMessage, 'error');
+        } finally {
+            setIsAILoading(false);
+        }
+    };
+    
+    const handleCurrencyChange = (newCurrency: string) => {
+        setPrimaryCurrency(newCurrency);
+        // Recalculate amounts for all transactions
+        setTransactions(prev => prev.map(t => ({
+            ...t,
+            amount: convertCurrency(t.originalAmount, t.originalCurrency, newCurrency)
+        })));
+        addToast(`Primary currency set to ${newCurrency}`, 'success');
+    };
+
+    const handleSaveCategories = (newCategories: ExpenseCategory[], newRuleMap: CategoryRuleMap) => {
+        // Find deleted categories
+        const deletedCategories = expenseCategories.filter(c => !newCategories.includes(c));
+        if (deletedCategories.length > 0) {
+            // Re-categorize transactions from deleted categories to 'Others'
+            setTransactions(prev => prev.map(t => 
+                deletedCategories.includes(t.category) ? { ...t, category: 'Others' } : t
+            ));
+        }
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
-            <Dashboard transactions={transactions} />
-            <TransactionList transactions={sortedTransactions} />
-          </div>
-          <div className="space-y-8">
-            <UploadReceipt onReceiptUpload={handleReceiptUpload} isLoading={isLoading && loadingMessage.includes('receipt')} />
-            <AIFeedback onGetFeedback={handleGetFeedback} feedback={feedback} isLoading={isLoading && loadingMessage.includes('insights')} />
-          </div>
-        </div>
+        setExpenseCategories(newCategories);
+        setCategoryRuleMap(newRuleMap);
+        setIsCategoriesModalOpen(false);
+        addToast('Categories saved!', 'success');
+    };
 
-        {itemsToCategorize.length > 0 && (
-          <CategorySelectorModal
-            transaction={itemsToCategorize[0]}
-            onCategorySelected={handleCategorySelected}
-            onClose={() => setItemsToCategorize(prev => prev.slice(1))}
-          />
-        )}
-        
-        {isLoading && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center z-50">
-                <div className="w-16 h-16 border-4 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                <p className="mt-4 text-white text-lg">{loadingMessage}</p>
+    const handleSaveBudgets = (newBudgets: Budgets) => {
+        setBudgets(newBudgets);
+        setIsBudgetsModalOpen(false);
+        addToast('Budgets saved!', 'success');
+    };
+    
+    const handleResetFilters = useCallback(() => {
+        setSearchTerm('');
+        setCategoryFilter('');
+        setDateFilter({ startDate: '', endDate: new Date().toISOString().split('T')[0] });
+    }, []);
+    
+    const filteredTransactions = useMemo(() => {
+        return transactions
+            .filter(t => {
+                const searchLower = searchTerm.toLowerCase();
+                const matchesSearch = 
+                    t.name.toLowerCase().includes(searchLower) ||
+                    t.merchant.toLowerCase().includes(searchLower) ||
+                    t.tags?.some(tag => tag.toLowerCase().includes(searchLower));
+                return matchesSearch;
+            })
+            .filter(t => categoryFilter ? t.category === categoryFilter : true)
+            .filter(t => {
+                if (!dateFilter.startDate) return true;
+                return t.date >= dateFilter.startDate;
+            })
+             .filter(t => {
+                if (!dateFilter.endDate) return true;
+                return t.date <= dateFilter.endDate;
+            })
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [transactions, searchTerm, categoryFilter, dateFilter]);
+    
+    return (
+        <div className="bg-slate-50 dark:bg-[#131314] min-h-screen font-sans">
+            <Header 
+                primaryCurrency={primaryCurrency}
+                onCurrencyChange={handleCurrencyChange}
+                onManageCategoriesClick={() => setIsCategoriesModalOpen(true)}
+// Fix: Correct typo 'fixtrue' to 'true'
+                onSetBudgetsClick={() => setIsBudgetsModalOpen(true)}
+                onAddTransactionClick={() => setIsAddTransactionModalOpen(true)}
+            />
+
+            <main className="container mx-auto p-4 md:px-8 md:py-8">
+                <Dashboard
+                    transactions={transactions}
+                    primaryCurrency={primaryCurrency}
+                    categoryColors={CATEGORY_COLORS}
+                    budgets={budgets}
+                    categoryRuleMap={categoryRuleMap}
+                />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start mt-8">
+                    <div className="lg:col-span-2">
+                        <TransactionList
+                            transactions={filteredTransactions}
+                            onEdit={(t) => setEditingTransaction(t)}
+                            primaryCurrency={primaryCurrency}
+                            categoryColors={CATEGORY_COLORS}
+                            searchTerm={searchTerm}
+                            onSearchChange={setSearchTerm}
+                            categories={expenseCategories}
+                            categoryFilter={categoryFilter}
+                            onCategoryChange={setCategoryFilter}
+                            dateFilter={dateFilter}
+                            onDateChange={(e) => setDateFilter(prev => ({...prev, [e.target.name]: e.target.value}))}
+                            onResetFilters={handleResetFilters}
+                        />
+                    </div>
+                    <div className="space-y-8 lg:sticky top-24">
+                        <UploadReceipt onReceiptUpload={handleReceiptUpload} isLoading={isLoading} />
+                        <AIFeedback
+                            onGetFeedback={handleGetAIFeedback}
+                            feedback={aiFeedback}
+                            isLoading={isAILoading}
+                        />
+                    </div>
+                </div>
+            </main>
+
+            {itemsToCategorize.length > 0 && (
+                <CategorySelectorModal 
+                    transaction={itemsToCategorize[0]}
+                    onCategorySelected={handleCategorySelected}
+                    onClose={handleSkipCategorization}
+                    categories={expenseCategories}
+                />
+            )}
+            
+            {editingTransaction && (
+                <EditTransactionModal 
+                    transaction={editingTransaction}
+                    onUpdate={handleUpdateTransaction}
+                    onClose={() => setEditingTransaction(null)}
+                    categories={expenseCategories}
+                />
+            )}
+
+            {isCategoriesModalOpen && (
+                <ManageCategoriesModal
+                    categories={expenseCategories}
+                    categoryRuleMap={categoryRuleMap}
+                    onSave={handleSaveCategories}
+                    onClose={() => setIsCategoriesModalOpen(false)}
+                />
+            )}
+
+            {isBudgetsModalOpen && (
+                <SetBudgetsModal
+                    categories={expenseCategories}
+                    budgets={budgets}
+                    onSave={handleSaveBudgets}
+                    onClose={() => setIsBudgetsModalOpen(false)}
+                    primaryCurrency={primaryCurrency}
+                />
+            )}
+
+            {isAddTransactionModalOpen && (
+                <AddTransactionModal
+                    categories={expenseCategories}
+                    onSave={handleAddTransaction}
+                    onClose={() => setIsAddTransactionModalOpen(false)}
+                />
+            )}
+
+            <div className="fixed top-20 right-5 z-50 space-y-2">
+                 {toasts.map(toast => (
+                    <Toast 
+                        key={toast.id}
+                        message={toast.message}
+                        type={toast.type}
+                        onClose={() => setToasts(t => t.filter(item => item.id !== toast.id))}
+                    />
+                ))}
             </div>
-        )}
-      </main>
-    </div>
-  );
+        </div>
+    );
 };
 
 export default App;

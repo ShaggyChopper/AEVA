@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import type { Transaction, ReceiptData } from '../types';
 
@@ -11,9 +10,17 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const receiptSchema = {
     type: Type.OBJECT,
     properties: {
+        merchant: {
+            type: Type.STRING,
+            description: "The name of the store or merchant from the receipt."
+        },
         date: {
             type: Type.STRING,
             description: "The date of the transaction in YYYY-MM-DD format. If not found, use today's date."
+        },
+        currency: {
+            type: Type.STRING,
+            description: "The 3-letter currency code (e.g., 'USD', 'EUR', 'GBP') found on the receipt. If not found, assume 'USD'."
         },
         items: {
             type: Type.ARRAY,
@@ -23,7 +30,7 @@ const receiptSchema = {
                 properties: {
                     name: {
                         type: Type.STRING,
-                        description: "The name of the item. Be concise."
+                        description: "The name of the item. Be concise. e.g., '1kg Chicken' or 'Milk 1L'."
                     },
                     price: {
                         type: Type.NUMBER,
@@ -38,15 +45,17 @@ const receiptSchema = {
             description: "The total amount on the receipt."
         }
     },
-    required: ["date", "items", "total"]
+    required: ["merchant", "date", "currency", "items", "total"]
 };
 
 export const processReceipt = async (base64ImageData: string): Promise<ReceiptData> => {
     const prompt = `
         Analyze this receipt image. Extract the following information:
-        1. The date of the transaction. If you can't find one, use today's date. Format it as YYYY-MM-DD.
-        2. A list of all individual items purchased, along with their price.
-        3. The total amount paid.
+        1. The name of the merchant/store.
+        2. The date of the transaction. If you can't find one, use today's date. Format it as YYYY-MM-DD.
+        3. The 3-letter currency code (e.g., USD, EUR, SEK). If you can't find it, assume the local currency based on the store or language, but make a reasonable guess.
+        4. A list of all individual items purchased, along with their price. Make item names descriptive (e.g., 'Milk 1L' instead of just 'Milk').
+        5. The total amount paid.
         
         Please provide the response in the specified JSON format. Do not include taxes or discounts as separate items, but ensure the total reflects the final amount paid.
     `;
@@ -79,30 +88,35 @@ export const processReceipt = async (base64ImageData: string): Promise<ReceiptDa
 };
 
 
-export const getFinancialFeedback = async (transactions: Transaction[]): Promise<string> => {
-    if (transactions.length === 0) {
-        return "No transaction data available to analyze.";
+export const getFinancialFeedback = async (transactions: Transaction[], primaryCurrency: string): Promise<string> => {
+    if (transactions.length < 5) {
+        return "Add a few more transactions to get detailed feedback and price comparisons.";
     }
 
-    const summary = transactions.reduce((acc, t) => {
-        if (t.category !== 'Income') {
-            acc[t.category] = (acc[t.category] || 0) + t.amount;
-        }
-        return acc;
-    }, {} as Record<string, number>);
+    const transactionDataForAI = transactions
+      .filter(t => t.category !== 'Income')
+      .map(t => ({
+          item: t.name,
+          price: t.amount, // Note: This is the converted amount
+          category: t.category,
+          merchant: t.merchant,
+          date: t.date
+      }));
 
     const prompt = `
-        As a friendly financial advisor, analyze the following expense summary and provide feedback.
-        The user wants to understand their spending habits better.
+        As a friendly and sharp financial advisor, analyze the following list of user's expenses.
+        All monetary values are presented in the user's primary currency: ${primaryCurrency}.
+        The user wants to understand their spending habits better and find ways to save money.
         
-        Expense Summary:
-        ${JSON.stringify(summary, null, 2)}
+        Expense Data (in ${primaryCurrency}):
+        ${JSON.stringify(transactionDataForAI, null, 2)}
         
-        Please provide:
+        Please provide feedback based on this data. Your feedback should include:
         1. A brief, encouraging opening.
         2. An observation about the category with the highest spending.
-        3. One or two practical and actionable suggestions for areas where they could potentially save money.
-        4. A positive concluding remark.
+        3. **Crucially, identify if the user bought similar items (e.g., 'Milk', 'Chicken', 'Coffee') at different stores. If so, compare the prices and suggest which store is cheaper for that item.** For example: "I noticed you bought '1kg Chicken' at Lidl for ${primaryCurrency} 8.50 and at ICA for ${primaryCurrency} 10.20. You could save money by buying your chicken at Lidl!". Be specific. If no direct comparisons can be made, skip this point.
+        4. One or two other practical and actionable suggestions for areas where they could save money.
+        5. A positive concluding remark.
         
         Keep the tone supportive and helpful, not judgmental. Format the response as a single block of text. Use markdown for simple formatting like bolding if needed.
     `;

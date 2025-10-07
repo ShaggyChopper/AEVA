@@ -1,10 +1,9 @@
-
 import React, { useEffect, useState } from 'react';
-import { CheckCircleIcon, XCircleIcon } from './icons';
+import { CheckCircleIcon, XCircleIcon, ExclamationTriangleIcon } from './icons';
 
 interface ToastProps {
   message: string;
-  type: 'success' | 'error';
+  type: 'success' | 'error' | 'warning';
   onClose: () => void;
 }
 
@@ -15,15 +14,30 @@ export const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
     setVisible(true);
     const timer = setTimeout(() => {
       setVisible(false);
-      setTimeout(onClose, 300); 
-    }, 3500);
+      // Let the fade-out animation finish before calling onClose
+      const closeTimer = setTimeout(onClose, 300); 
+      return () => clearTimeout(closeTimer);
+    }, 3800);
 
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message, type]);
+  }, [message, type, onClose]);
 
-  const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
-  const Icon = type === 'success' ? CheckCircleIcon : XCircleIcon;
+  const styleConfig = {
+    success: {
+      bgColor: 'bg-green-500',
+      icon: CheckCircleIcon,
+    },
+    error: {
+      bgColor: 'bg-red-500',
+      icon: XCircleIcon,
+    },
+    warning: {
+      bgColor: 'bg-amber-500',
+      icon: ExclamationTriangleIcon,
+    }
+  };
+
+  const { bgColor, icon: Icon } = styleConfig[type];
 
   return (
     <div

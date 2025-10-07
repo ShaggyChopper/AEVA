@@ -30,17 +30,17 @@ const UploadReceipt: React.FC<UploadReceiptProps> = ({ onReceiptUpload, isLoadin
   }, [file, onReceiptUpload]);
 
   return (
-    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-lg">
-      <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-4">Upload Receipt</h2>
+    <div className="bg-white dark:bg-[#1e1f20] p-6 rounded-2xl shadow-lg border border-transparent dark:border-[#444746]">
+      <h2 className="text-2xl font-bold text-slate-800 dark:text-[#e3e3e3] mb-4">Upload Receipt</h2>
       <div className="space-y-4">
         <label
           htmlFor="receipt-upload"
-          className="relative block w-full border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
+          className="relative block w-full border-2 border-dashed border-slate-300 dark:border-[#444746] rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 dark:hover:border-[#8ab4f8] transition-colors"
         >
           {preview ? (
             <img src={preview} alt="Receipt preview" className="mx-auto max-h-40 rounded-md object-contain" />
           ) : (
-            <div className="flex flex-col items-center text-slate-500 dark:text-slate-400">
+            <div className="flex flex-col items-center text-slate-500 dark:text-[#9aa0a6]">
               <PhotoIcon className="h-12 w-12 mx-auto" />
               <span className="mt-2 block text-sm font-medium">Click to upload or drag & drop</span>
               <span className="text-xs">PNG, JPG, GIF up to 10MB</span>
@@ -60,11 +60,11 @@ const UploadReceipt: React.FC<UploadReceiptProps> = ({ onReceiptUpload, isLoadin
         <button
           onClick={handleSubmit}
           disabled={!file || isLoading}
-          className="w-full flex justify-center items-center gap-2 bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all"
+          className="w-full flex justify-center items-center gap-2 bg-blue-600 text-white dark:bg-[#8ab4f8] dark:text-[#202124] font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 dark:hover:bg-[#9ac0fa] disabled:bg-slate-400 dark:disabled:bg-[#3c4043] dark:disabled:text-[#8a8a8a] disabled:cursor-not-allowed transition-all"
         >
           {isLoading ? (
             <>
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-5 h-5 border-2 border-white dark:border-[#202124] border-t-transparent rounded-full animate-spin"></div>
               Processing...
             </>
           ) : (
