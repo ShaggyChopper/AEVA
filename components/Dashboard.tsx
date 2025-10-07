@@ -47,22 +47,19 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, primaryCurrency, ca
 
         for (const t of transactions) {
             if (t.category === 'Income') {
-// Fix: Explicitly cast amount to Number to prevent potential type issues.
+                // Fix: Ensure transaction amount is treated as a number to prevent arithmetic errors.
                 totalIncome += Number(t.amount);
                 if (new Date(t.date) >= startOfMonth) {
-// Fix: Explicitly cast amount to Number to prevent potential type issues.
                     monthlyIncome += Number(t.amount);
                 }
             } else {
-// Fix: Explicitly cast amount to Number to prevent potential type issues.
+                // Fix: Ensure transaction amount is treated as a number to prevent arithmetic errors.
                 totalExpenses += Number(t.amount);
-// Fix: Explicitly cast amount to Number to prevent potential type issues.
                 categoryTotals[t.category] = (categoryTotals[t.category] || 0) + Number(t.amount);
 
                 if (new Date(t.date) >= startOfMonth) {
                     const bucket = categoryRuleMap[t.category];
                     if (bucket) {
-// Fix: Explicitly cast amount to Number to prevent potential type issues.
                         monthlyRuleTotals[bucket] += Number(t.amount);
                     }
                 }
@@ -134,8 +131,8 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, primaryCurrency, ca
                                 ))}
                                 </Pie>
                                 <Tooltip
-// Fix: Handle unknown type from recharts formatter and cast to number.
-                                    formatter={(value: unknown) => formatCurrency(value as number, primaryCurrency)}
+                                    // Fix: Handle unknown type from recharts formatter by explicitly converting to number.
+                                    formatter={(value: unknown) => formatCurrency(Number(value), primaryCurrency)}
                                     contentStyle={{
                                         backgroundColor: '#1e1f20',
                                         borderColor: '#444746',

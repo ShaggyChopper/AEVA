@@ -1,0 +1,21 @@
+{
+  "name": "AI Expense Tracker",
+  "short_name": "ExpenseTracker",
+  "description": "An intelligent expense tracker that automates categorization of your spending. Upload receipts, and the AI will learn to classify your expenses, providing you with insightful feedback on your financial habits.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#131314",
+  "theme_color": "#1e1f20",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}

@@ -3,13 +3,16 @@ import React, { useState, useCallback } from 'react';
 import { DocumentArrowUpIcon, PhotoIcon } from './icons';
 
 interface UploadReceiptProps {
-  onReceiptUpload: (file: File) => void;
+  onReceiptUpload: (file: File, merchant?: string) => void;
   isLoading: boolean;
+  isOnline: boolean;
+  merchants: string[];
 }
 
-const UploadReceipt: React.FC<UploadReceiptProps> = ({ onReceiptUpload, isLoading }) => {
+const UploadReceipt: React.FC<UploadReceiptProps> = ({ onReceiptUpload, isLoading, isOnline, merchants }) => {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [merchant, setMerchant] = useState('');
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -25,14 +28,37 @@ const UploadReceipt: React.FC<UploadReceiptProps> = ({ onReceiptUpload, isLoadin
 
   const handleSubmit = useCallback(() => {
     if (file) {
-      onReceiptUpload(file);
+      onReceiptUpload(file, merchant);
     }
-  }, [file, onReceiptUpload]);
+  }, [file, merchant, onReceiptUpload]);
+
+  const buttonDisabled = !file || isLoading || !isOnline;
 
   return (
     <div className="bg-white dark:bg-[#1e1f20] p-6 rounded-2xl shadow-lg border border-transparent dark:border-[#444746]">
       <h2 className="text-2xl font-bold text-slate-800 dark:text-[#e3e3e3] mb-4">Upload Receipt</h2>
       <div className="space-y-4">
+        <div>
+          <label htmlFor="merchant-input" className="block text-sm font-medium text-slate-700 dark:text-[#9aa0a6]">
+            Vendor (Optional)
+          </label>
+          <input
+            type="text"
+            id="merchant-input"
+            list="merchants-list"
+            value={merchant}
+            onChange={(e) => setMerchant(e.target.value)}
+            placeholder="Enter or select vendor"
+            className="mt-1 block w-full px-3 py-2 bg-white dark:bg-[#282a2c] border border-slate-300 dark:border-[#444746] rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          />
+          <datalist id="merchants-list">
+            {merchants.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+          <p className="text-xs text-slate-500 dark:text-[#9aa0a6] mt-1">Override the vendor detected by AI.</p>
+        </div>
+
         <label
           htmlFor="receipt-upload"
           className="relative block w-full border-2 border-dashed border-slate-300 dark:border-[#444746] rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 dark:hover:border-[#8ab4f8] transition-colors"
@@ -59,7 +85,8 @@ const UploadReceipt: React.FC<UploadReceiptProps> = ({ onReceiptUpload, isLoadin
         
         <button
           onClick={handleSubmit}
-          disabled={!file || isLoading}
+          disabled={buttonDisabled}
+          title={!isOnline ? "You are offline. This feature is unavailable." : !file ? "Please select a file first." : "Analyze Receipt"}
           className="w-full flex justify-center items-center gap-2 bg-blue-600 text-white dark:bg-[#8ab4f8] dark:text-[#202124] font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 dark:hover:bg-[#9ac0fa] disabled:bg-slate-400 dark:disabled:bg-[#3c4043] dark:disabled:text-[#8a8a8a] disabled:cursor-not-allowed transition-all"
         >
           {isLoading ? (
@@ -74,6 +101,11 @@ const UploadReceipt: React.FC<UploadReceiptProps> = ({ onReceiptUpload, isLoadin
             </>
           )}
         </button>
+        {!isOnline && (
+            <p className="text-center text-xs text-amber-500 dark:text-amber-400 mt-2">
+                Connect to the internet to analyze receipts.
+            </p>
+        )}
       </div>
     </div>
   );

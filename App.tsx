@@ -53,6 +53,7 @@ const App: React.FC = () => {
     const [isAILoading, setIsAILoading] = useState(false);
     const [aiFeedback, setAIFeedback] = useState('');
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
 
     // Modal state
     const [itemsToCategorize, setItemsToCategorize] = useState<Omit<Transaction, 'category'>[]>([]);
@@ -86,16 +87,42 @@ const App: React.FC = () => {
     useEffect(() => {
         localStorage.setItem('categoryRuleMap', JSON.stringify(categoryRuleMap));
     }, [categoryRuleMap]);
+    
+    // Listen for online/offline status changes
+    useEffect(() => {
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
+
+    const uniqueMerchants = useMemo(() => {
+        const merchants = new Set(transactions.map(t => t.merchant));
+        if (merchants.has('Income')) {
+            merchants.delete('Income');
+        }
+        return Array.from(merchants).sort();
+    }, [transactions]);
 
     const addToast = (message: string, type: ToastMessage['type']) => {
         setToasts(prev => [...prev, { id: Date.now(), message, type }]);
     };
     
-    const handleReceiptUpload = async (file: File) => {
+    const handleReceiptUpload = async (file: File, selectedMerchant?: string) => {
         setIsLoading(true);
         try {
             const base64Image = await fileToBase64(file);
             const receiptData = await processReceipt(base64Image);
+
+            if (selectedMerchant && selectedMerchant.trim() !== '') {
+                receiptData.merchant = selectedMerchant.trim();
+            }
             
             const newItemsToCategorize: Omit<Transaction, 'category'>[] = receiptData.items.map((item: ReceiptItem) => ({
                 id: crypto.randomUUID(),
@@ -263,7 +290,6 @@ const App: React.FC = () => {
                 primaryCurrency={primaryCurrency}
                 onCurrencyChange={handleCurrencyChange}
                 onManageCategoriesClick={() => setIsCategoriesModalOpen(true)}
-// Fix: Correct typo 'fixtrue' to 'true'
                 onSetBudgetsClick={() => setIsBudgetsModalOpen(true)}
                 onAddTransactionClick={() => setIsAddTransactionModalOpen(true)}
             />
@@ -294,11 +320,17 @@ const App: React.FC = () => {
                         />
                     </div>
                     <div className="space-y-8 lg:sticky top-24">
-                        <UploadReceipt onReceiptUpload={handleReceiptUpload} isLoading={isLoading} />
+                        <UploadReceipt 
+                            onReceiptUpload={handleReceiptUpload} 
+                            isLoading={isLoading} 
+                            isOnline={isOnline}
+                            merchants={uniqueMerchants}
+                        />
                         <AIFeedback
                             onGetFeedback={handleGetAIFeedback}
                             feedback={aiFeedback}
                             isLoading={isAILoading}
+                            isOnline={isOnline}
                         />
                     </div>
                 </div>

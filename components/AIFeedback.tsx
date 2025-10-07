@@ -6,9 +6,12 @@ interface AIFeedbackProps {
   onGetFeedback: () => void;
   feedback: string;
   isLoading: boolean;
+  isOnline: boolean;
 }
 
-const AIFeedback: React.FC<AIFeedbackProps> = ({ onGetFeedback, feedback, isLoading }) => {
+const AIFeedback: React.FC<AIFeedbackProps> = ({ onGetFeedback, feedback, isLoading, isOnline }) => {
+  const buttonDisabled = isLoading || !isOnline;
+
   return (
     <div className="bg-white dark:bg-[#1e1f20] p-6 rounded-2xl shadow-lg border border-transparent dark:border-[#444746]">
       <h2 className="text-2xl font-bold text-slate-800 dark:text-[#e3e3e3] mb-4">AI Financial Advisor</h2>
@@ -26,7 +29,8 @@ const AIFeedback: React.FC<AIFeedbackProps> = ({ onGetFeedback, feedback, isLoad
       
       <button
         onClick={onGetFeedback}
-        disabled={isLoading}
+        disabled={buttonDisabled}
+        title={!isOnline ? "You are offline. This feature is unavailable." : (feedback ? 'Regenerate Feedback' : 'Get AI Feedback')}
         className="w-full mt-4 flex justify-center items-center gap-2 bg-blue-600 text-white dark:bg-[#8ab4f8] dark:text-[#202124] font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 dark:hover:bg-[#9ac0fa] disabled:bg-slate-400 dark:disabled:bg-[#3c4043] dark:disabled:text-[#8a8a8a] disabled:cursor-not-allowed transition-all"
       >
         {isLoading ? (
@@ -41,6 +45,11 @@ const AIFeedback: React.FC<AIFeedbackProps> = ({ onGetFeedback, feedback, isLoad
           </>
         )}
       </button>
+      {!isOnline && (
+        <p className="text-center text-xs text-amber-500 dark:text-amber-400 mt-2">
+            Connect to the internet for AI feedback.
+        </p>
+      )}
     </div>
   );
 };
