@@ -14,3 +14,15 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+const splashScreen = document.getElementById('splash-screen');
+if (splashScreen) {
+  // Start the fade out
+  splashScreen.classList.add('hidden');
+  // Remove from DOM after transition
+  setTimeout(() => {
+    if (splashScreen) {
+      splashScreen.style.display = 'none';
+    }
+  }, 500); // Must match CSS transition duration
+}

@@ -1,6 +1,7 @@
 import React from 'react';
-import { WalletIcon, GlobeAltIcon, Cog6ToothIcon, PiggyBankIcon, PlusCircleIcon } from './icons';
+import { GlobeAltIcon, Cog6ToothIcon, PiggyBankIcon, PlusCircleIcon } from './icons';
 import { SUPPORTED_CURRENCIES } from '../constants';
+import { AevaIcon } from './AevaIcon';
 
 interface HeaderProps {
     primaryCurrency: string;
@@ -16,8 +17,8 @@ export const Header: React.FC<HeaderProps> = ({ primaryCurrency, onCurrencyChang
             <div className="container mx-auto px-4 md:px-8">
                 <div className="flex items-center justify-between h-16">
                     <div className="flex items-center gap-3">
-                        <WalletIcon className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-                        <h1 className="text-xl font-bold text-slate-800 dark:text-[#e3e3e3]">AI Expense Tracker</h1>
+                        <AevaIcon className="h-8 w-8" />
+                        <h1 className="text-xl font-bold text-slate-800 dark:text-[#e3e3e3]">AEVA</h1>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="relative">

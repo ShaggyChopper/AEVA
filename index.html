@@ -2,13 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='aeva-gradient' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%234F46E5' /%3E%3Cstop offset='100%25' stop-color='%23818CF8' /%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M16 4L4 28H8L10.6667 21.3333H21.3333L24 28H28L16 4ZM12 17.3333L16 7.33333L20 17.3333H12Z' fill='url(%23aeva-gradient)' /%3E%3C/svg%3E" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1e1f20" />
     <link rel="manifest" href="/manifest.json" />
-    <title>AI Expense Tracker</title>
+    <title>AEVA - AI Expense & Voucher Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
-  <script type="importmap">
+    <script type="importmap">
 {
   "imports": {
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
@@ -19,8 +19,64 @@
   }
 }
 </script>
-</head>
+    <style>
+      #splash-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #131314;
+        color: #e3e3e3;
+        transition: opacity 0.5s ease-out, visibility 0.5s ease-out;
+        opacity: 1;
+        visibility: visible;
+      }
+      #splash-screen.hidden {
+        opacity: 0;
+        visibility: hidden;
+      }
+      .splash-content {
+        text-align: center;
+        animation: fadeIn 1s ease-in-out;
+      }
+      .splash-title {
+        font-size: 3rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        margin-top: 1rem;
+        color: #e3e3e3;
+      }
+      .splash-subtitle {
+        font-size: 1rem;
+        color: #9aa0a6;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    </style>
+  </head>
   <body class="bg-slate-50 dark:bg-[#131314]">
+    <div id="splash-screen">
+      <div class="splash-content">
+        <svg width="80" height="80" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="aeva-gradient-splash" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#4F46E5" />
+              <stop offset="100%" stopColor="#818CF8" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M16 4L4 28H8L10.6667 21.3333H21.3333L24 28H28L16 4ZM12 17.3333L16 7.33333L20 17.3333H12Z"
+            fill="url(#aeva-gradient-splash)"
+          />
+        </svg>
+        <h1 class="splash-title">AEVA</h1>
+        <p class="splash-subtitle">AI Expense & Voucher Assistant</p>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
     <script>

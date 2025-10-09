@@ -46,14 +46,14 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, primaryCurrency, ca
         let monthlyIncome = 0;
 
         for (const t of transactions) {
+            // FIX: The left-hand side and right-hand side of an arithmetic operation must be of type 'number'.
+            // Coercing t.amount to a number prevents `totalIncome`/`totalExpenses` from becoming a string during addition.
             if (t.category === 'Income') {
-                // Fix: Ensure transaction amount is treated as a number to prevent arithmetic errors.
                 totalIncome += Number(t.amount);
                 if (new Date(t.date) >= startOfMonth) {
                     monthlyIncome += Number(t.amount);
                 }
             } else {
-                // Fix: Ensure transaction amount is treated as a number to prevent arithmetic errors.
                 totalExpenses += Number(t.amount);
                 categoryTotals[t.category] = (categoryTotals[t.category] || 0) + Number(t.amount);
 
@@ -131,7 +131,8 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, primaryCurrency, ca
                                 ))}
                                 </Pie>
                                 <Tooltip
-                                    // Fix: Handle unknown type from recharts formatter by explicitly converting to number.
+                                    // FIX: Argument of type 'unknown' is not assignable to parameter of type 'number'.
+                                    // Handle unknown type from recharts formatter by explicitly converting to a number.
                                     formatter={(value: unknown) => formatCurrency(Number(value), primaryCurrency)}
                                     contentStyle={{
                                         backgroundColor: '#1e1f20',

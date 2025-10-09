@@ -1,5 +1,7 @@
 {
-  "name": "AI Expense Tracker",
-  "description": "An intelligent expense tracker that automates categorization of your spending. Upload receipts, and the AI will learn to classify your expenses, providing you with insightful feedback on your financial habits.",
-  "requestFramePermissions": []
+  "name": "AEVA",
+  "description": "AEVA: Your AI Expense & Voucher Assistant. Snap receipts, track spending, and get smart financial insights effortlessly.",
+  "requestFramePermissions": [
+    "camera"
+  ]
 }
