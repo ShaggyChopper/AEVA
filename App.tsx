@@ -1,21 +1,25 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { processReceipt, getFinancialFeedback } from './services/geminiService';
-import type { Transaction, ReceiptData, ReceiptItem, ExpenseCategory, Budgets, ToastMessage, CategoryRuleMap } from './types';
-import { convertCurrency } from './utils/currency';
+import { processReceipt, getFinancialFeedback, detectMerchant } from './services/geminiService';
+import type { Transaction, ReceiptData, ReceiptItem, ExpenseCategory, Budgets, ToastMessage, CategoryRuleMap, Rule503020Bucket } from './types';
+import { convertCurrency, formatCurrency } from './utils/currency';
+import { getFinancialMonthRange } from './utils/date';
 import { DEFAULT_EXPENSE_CATEGORIES, CATEGORY_COLORS, DEFAULT_CATEGORY_RULE_MAP } from './constants';
 
 import { Header } from './components/Header';
-import Dashboard from './components/Dashboard';
+import DashboardTop from './components/DashboardTop';
+import DashboardBottom from './components/DashboardBottom';
 import CategorySelectorModal from './components/CategorySelectorModal';
 import EditTransactionModal from './components/EditTransactionModal';
 import { Toast } from './components/Toast';
 import ManageCategoriesModal from './components/ManageCategoriesModal';
 import SetBudgetsModal from './components/SetBudgetsModal';
 import AddTransactionModal from './components/AddTransactionModal';
-// Fix: Import missing components
 import TransactionList from './components/TransactionList';
 import UploadReceipt from './components/UploadReceipt';
 import AIFeedback from './components/AIFeedback';
+import FloatingActionButton from './components/FloatingActionButton';
+import CameraModal from './components/CameraModal';
+
 
 // A simple utility to convert a File to a a base64 string
 const fileToBase64 = (file: File): Promise<string> => {
@@ -26,6 +30,49 @@ const fileToBase64 = (file: File): Promise<string> => {
     reader.onerror = (error) => reject(error);
   });
 };
+
+interface ConfirmTaxModalProps {
+  receiptData: ReceiptData;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+const ConfirmTaxModal: React.FC<ConfirmTaxModalProps> = ({ receiptData, onConfirm, onCancel }) => {
+  if (!receiptData.tax || receiptData.tax <= 0) {
+    return null;
+  }
+  const formattedTax = formatCurrency(receiptData.tax, receiptData.currency);
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onCancel}>
+      <div 
+        className="bg-white dark:bg-[#1e1f20] rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center transform transition-all animate-in fade-in-0 zoom-in-95 border dark:border-[#444746]"
+        onClick={e => e.stopPropagation()}
+      >
+        <h2 className="text-xl font-bold text-slate-800 dark:text-[#e3e3e3]">Include Tax?</h2>
+        <p className="mt-2 text-slate-600 dark:text-[#9aa0a6]">
+          This receipt includes a tax of <span className="font-bold text-slate-800 dark:text-white">{formattedTax}</span>.
+        </p>
+        <p className="mt-1 text-slate-600 dark:text-[#9aa0a6]">
+          Would you like to add this as a separate expense in the 'Others' category?
+        </p>
+        <div className="flex justify-center gap-4 mt-6">
+          <button
+            onClick={onCancel}
+            className="px-6 py-2 text-sm font-medium text-slate-700 dark:text-[#e3e3e3] bg-slate-100 dark:bg-[#3c4043] rounded-md hover:bg-slate-200 dark:hover:bg-[#444746] transition-colors"
+          >
+            No, Ignore
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-6 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-[#8ab4f8] dark:text-[#202124] rounded-md hover:bg-blue-700 dark:hover:bg-[#9ac0fa] transition-colors"
+          >
+            Yes, Add
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 const App: React.FC = () => {
     const [transactions, setTransactions] = useState<Transaction[]>(() => {
@@ -54,6 +101,13 @@ const App: React.FC = () => {
     const [aiFeedback, setAIFeedback] = useState('');
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
+    
+    // Receipt upload state
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
+    const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+    const [receiptMerchant, setReceiptMerchant] = useState('');
+    const [isDetectingMerchant, setIsDetectingMerchant] = useState(false);
+    const [pendingTaxConfirmation, setPendingTaxConfirmation] = useState<ReceiptData | null>(null);
 
     // Modal state
     const [itemsToCategorize, setItemsToCategorize] = useState<Omit<Transaction, 'category'>[]>([]);
@@ -61,6 +115,8 @@ const App: React.FC = () => {
     const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
     const [isBudgetsModalOpen, setIsBudgetsModalOpen] = useState(false);
     const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
+    const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+    const [initialTransactionType, setInitialTransactionType] = useState<'expense' | 'income'>('expense');
     
     // Filter state
     const [searchTerm, setSearchTerm] = useState('');
@@ -114,28 +170,44 @@ const App: React.FC = () => {
         setToasts(prev => [...prev, { id: Date.now(), message, type }]);
     };
     
-    const handleReceiptUpload = async (file: File, selectedMerchant?: string) => {
+    const processReceiptItems = useCallback((receiptData: ReceiptData) => {
+        const newItemsToCategorize: Omit<Transaction, 'category'>[] = receiptData.items.map((item: ReceiptItem) => ({
+            id: crypto.randomUUID(),
+            name: item.name,
+            originalAmount: item.price,
+            originalCurrency: receiptData.currency,
+            amount: convertCurrency(item.price, receiptData.currency, primaryCurrency),
+            date: receiptData.date,
+            merchant: receiptData.merchant,
+        }));
+        setItemsToCategorize(newItemsToCategorize);
+    }, [primaryCurrency]);
+
+    const handleReceiptUpload = async () => {
+        if (!receiptFile) return;
+
         setIsLoading(true);
         try {
-            const base64Image = await fileToBase64(file);
+            const base64Image = await fileToBase64(receiptFile);
             const receiptData = await processReceipt(base64Image);
 
-            if (selectedMerchant && selectedMerchant.trim() !== '') {
-                receiptData.merchant = selectedMerchant.trim();
+            if (receiptMerchant && receiptMerchant.trim() !== '') {
+                receiptData.merchant = receiptMerchant.trim();
             }
             
-            const newItemsToCategorize: Omit<Transaction, 'category'>[] = receiptData.items.map((item: ReceiptItem) => ({
-                id: crypto.randomUUID(),
-                name: item.name,
-                originalAmount: item.price,
-                originalCurrency: receiptData.currency,
-                amount: convertCurrency(item.price, receiptData.currency, primaryCurrency),
-                date: receiptData.date,
-                merchant: receiptData.merchant,
-            }));
-
-            setItemsToCategorize(newItemsToCategorize);
             addToast('Receipt processed successfully!', 'success');
+            
+            // Reset after upload
+            setReceiptFile(null);
+            setReceiptPreview(null);
+            setReceiptMerchant('');
+
+            if (receiptData.tax && receiptData.tax > 0) {
+                setPendingTaxConfirmation(receiptData);
+            } else {
+                processReceiptItems(receiptData);
+            }
+
         } catch (error) {
             console.error(error);
             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -145,17 +217,56 @@ const App: React.FC = () => {
         }
     };
     
+    const handleDetectMerchant = async (file: File) => {
+        if (!isOnline) return;
+        setIsDetectingMerchant(true);
+        try {
+            const base64 = await fileToBase64(file);
+            const merchantName = await detectMerchant(base64);
+            if (merchantName) {
+                setReceiptMerchant(merchantName);
+            }
+        } catch (error) {
+            console.error("Failed to pre-fill merchant:", error);
+            // Fail silently on UI, but log error
+        } finally {
+            setIsDetectingMerchant(false);
+        }
+    };
+
+    const handleReceiptFileChange = (file: File) => {
+        setReceiptFile(file);
+        setReceiptMerchant(''); // Reset merchant on new file
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setReceiptPreview(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+        handleDetectMerchant(file);
+    };
+
+    const handlePhotoCapture = (blob: Blob) => {
+        const file = new File([blob], `capture-${Date.now()}.jpg`, { type: blob.type });
+        handleReceiptFileChange(file);
+    };
+
+    const handleCancelReceipt = useCallback(() => {
+        setReceiptFile(null);
+        setReceiptPreview(null);
+        setReceiptMerchant('');
+    }, []);
+
     const checkForBudgetAlerts = useCallback((transaction: Transaction) => {
         if (transaction.category === 'Income') return;
 
         const budget = budgets[transaction.category];
         if (!budget || budget <= 0) return;
 
-        const startOfMonth = new Date(new Date(transaction.date).getFullYear(), new Date(transaction.date).getMonth(), 1).toISOString().split('T')[0];
-        const endOfMonth = new Date(new Date(transaction.date).getFullYear(), new Date(transaction.date).getMonth() + 1, 0).toISOString().split('T')[0];
+        const transactionDate = new Date(transaction.date);
+        const { startDate, endDate } = getFinancialMonthRange(transactionDate);
 
         const monthlySpend = transactions
-            .filter(t => t.category === transaction.category && t.date >= startOfMonth && t.date <= endOfMonth)
+            .filter(t => t.category === transaction.category && t.date >= startDate && t.date <= endDate)
             .reduce((sum, t) => sum + t.amount, 0);
 
         const newTotalSpend = monthlySpend + transaction.amount;
@@ -166,6 +277,33 @@ const App: React.FC = () => {
             addToast(`You've used over 80% of your ${transaction.category} budget.`, 'warning');
         }
     }, [transactions, budgets]);
+
+    const handleConfirmTax = () => {
+        if (!pendingTaxConfirmation) return;
+
+        const taxTransaction: Transaction = {
+            id: crypto.randomUUID(),
+            name: 'Sales Tax / VAT',
+            originalAmount: pendingTaxConfirmation.tax!,
+            originalCurrency: pendingTaxConfirmation.currency,
+            amount: convertCurrency(pendingTaxConfirmation.tax!, pendingTaxConfirmation.currency, primaryCurrency),
+            date: pendingTaxConfirmation.date,
+            merchant: pendingTaxConfirmation.merchant,
+            category: 'Others',
+        };
+        setTransactions(prev => [taxTransaction, ...prev]);
+        checkForBudgetAlerts(taxTransaction);
+        addToast('Tax added as an expense.', 'success');
+
+        processReceiptItems(pendingTaxConfirmation);
+        setPendingTaxConfirmation(null);
+    };
+
+    const handleIgnoreTax = () => {
+        if (!pendingTaxConfirmation) return;
+        processReceiptItems(pendingTaxConfirmation);
+        setPendingTaxConfirmation(null);
+    };
 
     const handleCategorySelected = (transactionId: string, category: ExpenseCategory) => {
         const item = itemsToCategorize.find(t => t.id === transactionId);
@@ -194,6 +332,12 @@ const App: React.FC = () => {
         checkForBudgetAlerts(finalTransaction);
     };
 
+    const handleDeleteTransaction = (transactionId: string) => {
+        setTransactions(prev => prev.filter(t => t.id !== transactionId));
+        setEditingTransaction(null);
+        addToast('Transaction deleted.', 'success');
+    };
+
     const handleAddTransaction = (newTransactionData: Omit<Transaction, 'id' | 'amount'>) => {
         const newTransaction: Transaction = {
             id: crypto.randomUUID(),
@@ -213,7 +357,7 @@ const App: React.FC = () => {
         }
         setIsAILoading(true);
         try {
-            const feedback = await getFinancialFeedback(transactions, primaryCurrency);
+            const feedback = await getFinancialFeedback(transactions, primaryCurrency, categoryRuleMap);
             setAIFeedback(feedback);
         } catch (error) {
             console.error(error);
@@ -262,6 +406,51 @@ const App: React.FC = () => {
         setDateFilter({ startDate: '', endDate: new Date().toISOString().split('T')[0] });
     }, []);
     
+    const financialSummary = useMemo(() => {
+        const { startDate: financialMonthStart, endDate: financialMonthEnd } = getFinancialMonthRange();
+
+        let totalIncome = 0;
+        let totalExpenses = 0;
+        const categoryTotals = new Map<string, number>();
+        
+        const monthlyRuleTotals: Record<Rule503020Bucket, number> = { Needs: 0, Wants: 0, Savings: 0 };
+        const monthlyCategoryTotals = new Map<string, number>();
+        let monthlyIncome = 0;
+
+        for (const t of transactions) {
+            const transactionAmount = Number(t.amount) || 0;
+            const isThisFinancialMonth = t.date >= financialMonthStart && t.date <= financialMonthEnd;
+
+            if (t.category === 'Income') {
+                totalIncome += transactionAmount;
+                if (isThisFinancialMonth) {
+                    monthlyIncome += transactionAmount;
+                }
+            } else {
+                totalExpenses += transactionAmount;
+                categoryTotals.set(t.category, (categoryTotals.get(t.category) || 0) + transactionAmount);
+
+                if (isThisFinancialMonth) {
+                    const bucket = categoryRuleMap[t.category];
+                    if (bucket) {
+                        monthlyRuleTotals[bucket] += transactionAmount;
+                    }
+                    monthlyCategoryTotals.set(t.category, (monthlyCategoryTotals.get(t.category) || 0) + transactionAmount);
+                }
+            }
+        }
+        
+        return { 
+            totalIncome, 
+            totalExpenses, 
+            netBalance: totalIncome - totalExpenses, 
+            categoryTotals, // all-time for pie chart
+            monthlyRuleTotals,
+            monthlyIncome,
+            monthlyCategoryTotals // current financial month for budgets
+        };
+    }, [transactions, categoryRuleMap]);
+
     const filteredTransactions = useMemo(() => {
         return transactions
             .filter(t => {
@@ -269,6 +458,7 @@ const App: React.FC = () => {
                 const matchesSearch = 
                     t.name.toLowerCase().includes(searchLower) ||
                     t.merchant.toLowerCase().includes(searchLower) ||
+                    t.category.toLowerCase().includes(searchLower) ||
                     t.tags?.some(tag => tag.toLowerCase().includes(searchLower));
                 return matchesSearch;
             })
@@ -284,6 +474,16 @@ const App: React.FC = () => {
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [transactions, searchTerm, categoryFilter, dateFilter]);
     
+    const handleOpenAddTransactionModal = () => {
+        setInitialTransactionType('expense');
+        setIsAddTransactionModalOpen(true);
+    };
+
+    const handleAddIncomeClick = () => {
+        setInitialTransactionType('income');
+        setIsAddTransactionModalOpen(true);
+    };
+
     return (
         <div className="bg-slate-50 dark:bg-[#131314] min-h-screen font-sans">
             <Header 
@@ -291,47 +491,79 @@ const App: React.FC = () => {
                 onCurrencyChange={handleCurrencyChange}
                 onManageCategoriesClick={() => setIsCategoriesModalOpen(true)}
                 onSetBudgetsClick={() => setIsBudgetsModalOpen(true)}
-                onAddTransactionClick={() => setIsAddTransactionModalOpen(true)}
+                onAddTransactionClick={handleOpenAddTransactionModal}
             />
 
             <main className="container mx-auto p-4 md:px-8 md:py-8">
-                <Dashboard
-                    transactions={transactions}
-                    primaryCurrency={primaryCurrency}
-                    categoryColors={CATEGORY_COLORS}
-                    budgets={budgets}
-                    categoryRuleMap={categoryRuleMap}
-                />
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start mt-8">
-                    <div className="lg:col-span-2">
-                        <TransactionList
-                            transactions={filteredTransactions}
-                            onEdit={(t) => setEditingTransaction(t)}
-                            primaryCurrency={primaryCurrency}
-                            categoryColors={CATEGORY_COLORS}
-                            searchTerm={searchTerm}
-                            onSearchChange={setSearchTerm}
-                            categories={expenseCategories}
-                            categoryFilter={categoryFilter}
-                            onCategoryChange={setCategoryFilter}
-                            dateFilter={dateFilter}
-                            onDateChange={(e) => setDateFilter(prev => ({...prev, [e.target.name]: e.target.value}))}
-                            onResetFilters={handleResetFilters}
-                        />
+                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                    
+                    {/* Main Content Column */}
+                    <div className="lg:col-span-2 flex flex-col gap-8">
+                        <div className="order-1">
+                            <DashboardTop
+                                primaryCurrency={primaryCurrency}
+                                totalIncome={financialSummary.totalIncome}
+                                totalExpenses={financialSummary.totalExpenses}
+                                netBalance={financialSummary.netBalance}
+                                monthlyRuleTotals={financialSummary.monthlyRuleTotals}
+                                monthlyIncome={financialSummary.monthlyIncome}
+                            />
+                        </div>
+                        <div className="order-3 lg:order-2">
+                             <DashboardBottom
+                                primaryCurrency={primaryCurrency}
+                                categoryColors={CATEGORY_COLORS}
+                                budgets={budgets}
+                                categoryTotals={financialSummary.categoryTotals}
+                                monthlyCategoryTotals={financialSummary.monthlyCategoryTotals}
+                            />
+                        </div>
+                        <div className="order-4 lg:order-3">
+                            <TransactionList
+                                transactions={filteredTransactions}
+                                onEdit={(t) => setEditingTransaction(t)}
+                                primaryCurrency={primaryCurrency}
+                                categoryColors={CATEGORY_COLORS}
+                                searchTerm={searchTerm}
+                                onSearchChange={setSearchTerm}
+                                categories={expenseCategories}
+                                categoryFilter={categoryFilter}
+                                onCategoryChange={setCategoryFilter}
+                                dateFilter={dateFilter}
+                                onDateChange={(e) => setDateFilter(prev => ({...prev, [e.target.name]: e.target.value}))}
+                                onResetFilters={handleResetFilters}
+                                budgets={budgets}
+                                monthlyCategoryTotals={financialSummary.monthlyCategoryTotals}
+                            />
+                        </div>
                     </div>
-                    <div className="space-y-8 lg:sticky top-24">
-                        <UploadReceipt 
-                            onReceiptUpload={handleReceiptUpload} 
-                            isLoading={isLoading} 
-                            isOnline={isOnline}
-                            merchants={uniqueMerchants}
-                        />
-                        <AIFeedback
-                            onGetFeedback={handleGetAIFeedback}
-                            feedback={aiFeedback}
-                            isLoading={isAILoading}
-                            isOnline={isOnline}
-                        />
+
+                    {/* Sidebar Column */}
+                    <div className="lg:col-span-1 flex flex-col gap-8 lg:sticky top-24">
+                        <div className="order-2 lg:order-1">
+                            <UploadReceipt 
+                                onReceiptUpload={handleReceiptUpload} 
+                                isLoading={isLoading} 
+                                isOnline={isOnline}
+                                merchants={uniqueMerchants}
+                                onTakePictureClick={() => setIsCameraModalOpen(true)}
+                                file={receiptFile}
+                                preview={receiptPreview}
+                                onFileChange={handleReceiptFileChange}
+                                onCancel={handleCancelReceipt}
+                                merchant={receiptMerchant}
+                                onMerchantChange={setReceiptMerchant}
+                                isDetectingMerchant={isDetectingMerchant}
+                            />
+                        </div>
+                        <div className="order-5 lg:order-2">
+                            <AIFeedback
+                                onGetFeedback={handleGetAIFeedback}
+                                feedback={aiFeedback}
+                                isLoading={isAILoading}
+                                isOnline={isOnline}
+                            />
+                        </div>
                     </div>
                 </div>
             </main>
@@ -349,6 +581,7 @@ const App: React.FC = () => {
                 <EditTransactionModal 
                     transaction={editingTransaction}
                     onUpdate={handleUpdateTransaction}
+                    onDelete={handleDeleteTransaction}
                     onClose={() => setEditingTransaction(null)}
                     categories={expenseCategories}
                 />
@@ -378,8 +611,29 @@ const App: React.FC = () => {
                     categories={expenseCategories}
                     onSave={handleAddTransaction}
                     onClose={() => setIsAddTransactionModalOpen(false)}
+                    initialType={initialTransactionType}
                 />
             )}
+
+            {isCameraModalOpen && (
+                <CameraModal 
+                onClose={() => setIsCameraModalOpen(false)}
+                onCapture={handlePhotoCapture}
+                />
+            )}
+
+            {pendingTaxConfirmation && (
+                <ConfirmTaxModal
+                    receiptData={pendingTaxConfirmation}
+                    onConfirm={handleConfirmTax}
+                    onCancel={handleIgnoreTax}
+                />
+            )}
+
+            <FloatingActionButton
+                onAddIncomeClick={handleAddIncomeClick}
+                onUploadReceiptClick={() => setIsCameraModalOpen(true)}
+            />
 
             <div className="fixed top-20 right-5 z-50 space-y-2">
                  {toasts.map(toast => (

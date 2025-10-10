@@ -10,10 +10,14 @@ interface ManageCategoriesModalProps {
   onClose: () => void;
 }
 
+const MAX_CATEGORIES = 15;
+
 const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({ categories, categoryRuleMap, onSave, onClose }) => {
   const [localCategories, setLocalCategories] = useState<ExpenseCategory[]>(categories.filter(c => c !== 'Others'));
   const [localRuleMap, setLocalRuleMap] = useState<CategoryRuleMap>(categoryRuleMap);
   const [newCategory, setNewCategory] = useState('');
+
+  const isCategoryLimitReached = localCategories.length >= MAX_CATEGORIES;
 
   useEffect(() => {
     setLocalCategories(categories.filter(c => c !== 'Others'));
@@ -22,6 +26,8 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({ categorie
 
 
   const handleAddCategory = () => {
+    if (isCategoryLimitReached) return;
+
     if (newCategory && !localCategories.includes(newCategory) && newCategory !== 'Others' && newCategory !== 'Income') {
       const newCategoryName = newCategory.trim();
       setLocalCategories([...localCategories, newCategoryName]);
@@ -78,18 +84,32 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({ categorie
             ))}
         </div>
 
-        <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-[#444746]">
-            <input
-                type="text"
-                value={newCategory}
-                onChange={e => setNewCategory(e.target.value)}
-                placeholder="New category name..."
-                className="flex-grow block w-full px-3 py-2 bg-white dark:bg-[#282a2c] border border-slate-300 dark:border-[#444746] rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-            <button onClick={handleAddCategory} className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 dark:bg-[#8ab4f8] dark:text-[#202124] dark:hover:bg-[#9ac0fa]">
-                <PlusIcon className="h-6 w-6" />
-            </button>
+        <div className="flex flex-col">
+            <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-[#444746]">
+                <input
+                    type="text"
+                    value={newCategory}
+                    onChange={e => setNewCategory(e.target.value)}
+                    placeholder={isCategoryLimitReached ? "Category limit reached" : "New category name..."}
+                    className="flex-grow block w-full px-3 py-2 bg-white dark:bg-[#282a2c] border border-slate-300 dark:border-[#444746] rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm disabled:opacity-50"
+                    disabled={isCategoryLimitReached}
+                />
+                <button 
+                    onClick={handleAddCategory} 
+                    className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 dark:bg-[#8ab4f8] dark:text-[#202124] dark:hover:bg-[#9ac0fa] disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isCategoryLimitReached || !newCategory.trim()}
+                    aria-label="Add new category"
+                >
+                    <PlusIcon className="h-6 w-6" />
+                </button>
+            </div>
+            {isCategoryLimitReached && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 text-center mt-2">
+                    You have reached the maximum of {MAX_CATEGORIES} custom categories.
+                </p>
+            )}
         </div>
+
 
         <div className="flex justify-end gap-3 pt-6">
             <button

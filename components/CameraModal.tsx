@@ -9,44 +9,59 @@ interface CameraModalProps {
 const CameraModal: React.FC<CameraModalProps> = ({ onClose, onCapture }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const [isStreaming, setIsStreaming] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Stable function to stop the camera stream
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+      setIsStreaming(false);
+    }
+  }, []);
+
+  // Stable function to start the camera stream
   const startCamera = useCallback(async () => {
     try {
+      // Ensure any previous stream is stopped before starting a new one
+      if (streamRef.current) {
+        stopCamera();
+      }
       setCapturedImage(null);
       setError(null);
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' }, // Prefer rear camera
         audio: false,
       });
-      setStream(mediaStream);
+
+      streamRef.current = mediaStream;
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
+      setIsStreaming(true);
+
     } catch (err) {
       console.error("Error accessing camera:", err);
       setError("Could not access the camera. Please check permissions.");
+      setIsStreaming(false);
     }
-  }, []);
+  }, [stopCamera]);
 
-  const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-  }, [stream]);
-
+  // Effect to manage camera lifecycle on mount and unmount
   useEffect(() => {
     startCamera();
-    return () => {
-      stopCamera();
-    };
+
+    // The returned function is the cleanup function, called on unmount
+    return stopCamera;
   }, [startCamera, stopCamera]);
 
   const handleCapture = () => {
-    if (videoRef.current && canvasRef.current) {
+    if (videoRef.current && canvasRef.current && isStreaming) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       canvas.width = video.videoWidth;
@@ -55,7 +70,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ onClose, onCapture }) => {
       if (context) {
         context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
         setCapturedImage(canvas.toDataURL('image/jpeg'));
-        stopCamera();
+        stopCamera(); // Stop the stream after capture
       }
     }
   };
@@ -109,7 +124,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ onClose, onCapture }) => {
               </button>
             </>
           ) : (
-            <button onClick={handleCapture} disabled={!stream} className="p-4 bg-white/20 border-4 border-white rounded-full backdrop-blur-md disabled:opacity-50" aria-label="Take Photo">
+            <button onClick={handleCapture} disabled={!isStreaming} className="p-4 bg-white/20 border-4 border-white rounded-full backdrop-blur-md disabled:opacity-50" aria-label="Take Photo">
               <div className="w-10 h-10 bg-white rounded-full"></div>
             </button>
           )}

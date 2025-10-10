@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import type { Transaction, ExpenseCategory } from '../types';
 import { SUPPORTED_CURRENCIES } from '../constants';
+import { TrashIcon } from './icons';
 
 interface EditTransactionModalProps {
   transaction: Transaction;
   onUpdate: (transaction: Transaction) => void;
+  onDelete: (transactionId: string) => void;
   onClose: () => void;
   categories: ExpenseCategory[];
 }
 
-const EditTransactionModal: React.FC<EditTransactionModalProps> = ({ transaction, onUpdate, onClose, categories }) => {
+const EditTransactionModal: React.FC<EditTransactionModalProps> = ({ transaction, onUpdate, onClose, onDelete, categories }) => {
   const [formData, setFormData] = useState<Transaction>(transaction);
   const [tagsInput, setTagsInput] = useState<string>(transaction.tags?.join(', ') || '');
 
@@ -37,6 +39,12 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({ transaction
     e.preventDefault();
     const tags = tagsInput.split(',').map(tag => tag.trim()).filter(Boolean);
     onUpdate({ ...formData, tags });
+  };
+  
+  const handleDelete = () => {
+    if (window.confirm('Are you sure you want to delete this transaction? This action cannot be undone.')) {
+        onDelete(transaction.id);
+    }
   };
 
   return (
@@ -137,20 +145,30 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({ transaction
             />
              <p className="text-xs text-slate-500 dark:text-[#9aa0a6] mt-1">Comma-separated values.</p>
           </div>
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex justify-between items-center pt-4">
             <button
               type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-[#e3e3e3] bg-slate-100 dark:bg-[#3c4043] rounded-md hover:bg-slate-200 dark:hover:bg-[#444746]"
+              onClick={handleDelete}
+              className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 rounded-md hover:bg-red-200 dark:hover:bg-red-900/60 flex items-center gap-2 transition-colors"
             >
-              Cancel
+              <TrashIcon className="h-4 w-4" />
+              Delete
             </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-[#8ab4f8] dark:text-[#202124] rounded-md hover:bg-blue-700 dark:hover:bg-[#9ac0fa]"
-            >
-              Save Changes
-            </button>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-[#e3e3e3] bg-slate-100 dark:bg-[#3c4043] rounded-md hover:bg-slate-200 dark:hover:bg-[#444746]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-[#8ab4f8] dark:text-[#202124] rounded-md hover:bg-blue-700 dark:hover:bg-[#9ac0fa]"
+              >
+                Save Changes
+              </button>
+            </div>
           </div>
         </form>
       </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Transaction, ExpenseCategory } from '../types';
 import { SUPPORTED_CURRENCIES } from '../constants';
 
@@ -6,10 +6,11 @@ interface AddTransactionModalProps {
   onSave: (data: Omit<Transaction, 'id' | 'amount'>) => void;
   onClose: () => void;
   categories: ExpenseCategory[];
+  initialType?: 'expense' | 'income';
 }
 
-const AddTransactionModal: React.FC<AddTransactionModalProps> = ({ onSave, onClose, categories }) => {
-    const [type, setType] = useState<'expense' | 'income'>('expense');
+const AddTransactionModal: React.FC<AddTransactionModalProps> = ({ onSave, onClose, categories, initialType = 'expense' }) => {
+    const [type, setType] = useState<'expense' | 'income'>(initialType);
     const [name, setName] = useState('');
     const [originalAmount, setOriginalAmount] = useState<number | ''>('');
     const [originalCurrency, setOriginalCurrency] = useState('USD');
@@ -18,6 +19,10 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({ onSave, onClo
     const [category, setCategory] = useState(categories[0] || 'Others');
     const [tagsInput, setTagsInput] = useState('');
     
+    useEffect(() => {
+        setType(initialType);
+    }, [initialType]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (originalAmount === '' || originalAmount <= 0) return;

@@ -11,6 +11,7 @@ export interface ReceiptData {
   currency: string;
   items: ReceiptItem[];
   total: number;
+  tax?: number;
 }
 
 export interface Transaction {
