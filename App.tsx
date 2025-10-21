@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { processReceipt, getFinancialFeedback, detectMerchant } from './services/geminiService';
+import { processReceipt, getFinancialFeedback, detectMerchant, queryTransactions } from './services/geminiService';
 import type { Transaction, ReceiptData, ReceiptItem, ExpenseCategory, Budgets, ToastMessage, CategoryRuleMap, Rule503020Bucket } from './types';
 import { convertCurrency, formatCurrency } from './utils/currency';
 import { getFinancialMonthRange } from './utils/date';
@@ -19,6 +19,7 @@ import UploadReceipt from './components/UploadReceipt';
 import AIFeedback from './components/AIFeedback';
 import FloatingActionButton from './components/FloatingActionButton';
 import CameraModal from './components/CameraModal';
+import AIQuery from './components/AIQuery';
 
 
 // A simple utility to convert a File to a a base64 string
@@ -101,6 +102,8 @@ const App: React.FC = () => {
     const [aiFeedback, setAIFeedback] = useState('');
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [aiQueryAnswer, setAIQueryAnswer] = useState('');
+    const [isAIQueryLoading, setIsAIQueryLoading] = useState(false);
     
     // Receipt upload state
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -367,6 +370,26 @@ const App: React.FC = () => {
             setIsAILoading(false);
         }
     };
+
+    const handleAskAIQuery = async (question: string) => {
+        if (transactions.length === 0) {
+            addToast("You don't have any transactions to ask questions about.", 'warning');
+            return;
+        }
+        setIsAIQueryLoading(true);
+        setAIQueryAnswer(''); // Clear previous answer
+        try {
+            const answer = await queryTransactions(question, transactions, primaryCurrency);
+            setAIQueryAnswer(answer);
+        } catch (error) {
+            console.error(error);
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            addToast(errorMessage, 'error');
+            setAIQueryAnswer('Sorry, I was unable to get an answer. Please try again.');
+        } finally {
+            setIsAIQueryLoading(false);
+        }
+    };
     
     const handleCurrencyChange = (newCurrency: string) => {
         setPrimaryCurrency(newCurrency);
@@ -561,6 +584,14 @@ const App: React.FC = () => {
                                 onGetFeedback={handleGetAIFeedback}
                                 feedback={aiFeedback}
                                 isLoading={isAILoading}
+                                isOnline={isOnline}
+                            />
+                        </div>
+                        <div className="order-6 lg:order-3">
+                            <AIQuery
+                                onAskQuery={handleAskAIQuery}
+                                answer={aiQueryAnswer}
+                                isLoading={isAIQueryLoading}
                                 isOnline={isOnline}
                             />
                         </div>

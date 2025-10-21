@@ -239,3 +239,49 @@ export const getFinancialFeedback = async (
         throw new Error("Failed to get financial feedback from the AI model.");
     }
 };
+
+export const queryTransactions = async (
+    question: string,
+    transactions: Transaction[],
+    primaryCurrency: string
+): Promise<string> => {
+    if (transactions.length === 0) {
+        return "There are no transactions to analyze.";
+    }
+
+    // Prepare a more concise version of the transaction data for the prompt
+    const transactionDataForAI = transactions.map(t => ({
+        name: t.name,
+        amount: t.amount,
+        currency: primaryCurrency, // All amounts are already converted
+        date: t.date,
+        merchant: t.merchant,
+        category: t.category,
+    }));
+
+    const prompt = `
+        You are a helpful financial assistant named AEVA. Your task is to answer questions based strictly on the provided JSON data of financial transactions. 
+        - Do not make up information or use external knowledge. 
+        - If the answer cannot be found in the data, state that clearly. 
+        - All monetary values are in ${primaryCurrency}.
+        - Be concise and straight to the point in your answer.
+
+        Here is the transaction data:
+        ${JSON.stringify(transactionDataForAI, null, 2)}
+
+        Now, please answer the following question:
+        "${question}"
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt
+        });
+
+        return response.text;
+    } catch (error) {
+        console.error("Gemini API call failed for transaction query:", error);
+        throw new Error("Failed to get an answer from the AI model.");
+    }
+};

@@ -41,7 +41,7 @@ export const LightBulbIcon: React.FC<IconProps> = (props) => (
 
 export const WalletIcon: React.FC<IconProps> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 3a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 12m15.75 0-3.75-3.75M3 12l3.75-3.75m12 7.5c.621 0 1.125-.504 1.125-1.125V12a1.125 1.125 0 0 0-1.125-1.125h-3.375c-.621 0-1.125.504-1.125 1.125V15.375c0 .621.504 1.125 1.125 1.125h3.375Z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25-2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 3a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 12m15.75 0-3.75-3.75M3 12l3.75-3.75m12 7.5c.621 0 1.125-.504 1.125-1.125V12a1.125 1.125 0 0 0-1.125-1.125h-3.375c-.621 0-1.125.504-1.125 1.125V15.375c0 .621.504 1.125 1.125 1.125h3.375Z" />
   </svg>
 );
 
@@ -155,4 +155,16 @@ export const CurrencyDollarIcon: React.FC<IconProps> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 11.21 12.77 11 12 11h-1.5a2.25 2.25 0 0 0-2.25 2.25v2.25Z" />
   </svg>
+);
+
+export const ChatBubbleLeftRightIcon: React.FC<IconProps> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193l-3.722.28c-.427.032-.851-.074-1.227-.26l-3.068-.982a2.25 2.25 0 0 0-1.631.162l-2.81 1.28c-.828.378-1.79.197-2.428-.43L3 17.25a2.25 2.25 0 0 1 .622-2.428l3.068-2.556a2.25 2.25 0 0 0 1.161-2.03l.21-3.685a2.25 2.25 0 0 1 2.25-2.25h3.818c.95 0 1.812.504 2.22 1.286L20.25 8.511Z" />
+    </svg>
+);
+
+export const PaperAirplaneIcon: React.FC<IconProps> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+    </svg>
 );
